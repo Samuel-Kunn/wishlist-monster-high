@@ -132,6 +132,19 @@ body{margin:0;min-height:100vh}
 .share-row input{flex:1}
 .gbtn{display:flex;justify-content:center;min-height:44px;margin:8px 0 4px}
 .gbtn iframe{color-scheme:light}
+h1 em{cursor:default;-webkit-tap-highlight-color:transparent;user-select:none}
+dialog.egg{text-align:center;width:min(440px,calc(100vw - 32px));background:radial-gradient(420px 220px at 50% 0,color-mix(in srgb,var(--pink) 28%,transparent),transparent 70%),linear-gradient(180deg,var(--surface2),var(--surface) 40%)}
+.egg-ico{font-size:2.6rem;line-height:1;margin:4px 0 10px;animation:beat 1.4s var(--ease) infinite}
+.egg h2{margin-bottom:6px}
+.egg h2 em{font-style:normal;color:var(--pink)}
+.egg p{margin:0 0 12px;color:var(--fg)}
+.egg .note{color:var(--muted)}
+.egg .dlgacts{justify-content:center}
+@keyframes beat{0%,100%{transform:scale(1)}15%{transform:scale(1.18)}30%{transform:scale(1)}45%{transform:scale(1.1)}}
+.egg-rain{position:fixed;inset:0;pointer-events:none;z-index:2147483647;overflow:hidden}
+.egg-rain span{position:absolute;top:-2em;animation:fall linear forwards}
+@keyframes fall{to{transform:translateY(110vh) rotate(540deg);opacity:.15}}
+@media (prefers-reduced-motion:reduce){.egg-rain{display:none}}
 .site-foot{text-align:center;padding:0 16px 32px;font-size:.8rem}
 .site-foot a{color:var(--muted)}
 </style>
@@ -203,6 +216,12 @@ app.innerHTML=
 '<div class="dlgacts"><button type="button" class="btn ghost" id="share-cancel">Fechar</button><button type="button" class="btn" id="share-send" hidden>Enviar…</button><button class="btn primary">Guardar nome</button></div></form></dialog>'+
 '<dialog id="dlg-login"><h2>Entrar</h2><p class="note">Use sua conta Google para montar sua lista ou reservar um presente.</p><div id="gbtn" class="gbtn"></div>'+
 '<div class="dlgacts"><button type="button" class="btn ghost" id="login-cancel">Cancelar</button></div></dialog>'+
+'<dialog id="dlg-egg" class="egg" aria-labelledby="egg-title"><div class="egg-ico" aria-hidden="true">💀💖</div>'+
+'<h2 id="egg-title">Para <em>Raissa Massaroli</em></h2>'+
+'<p>Este site foi feito em sua homenagem, para a maior fã de Monster High que eu conheço.</p>'+
+'<p>Que a sua coleção nunca pare de crescer, e que cada dia ao seu lado continue assustadoramente feliz.</p>'+
+'<p class="note">Com todo o meu amor. 🖤</p>'+
+'<div class="dlgacts"><button type="button" class="btn primary" id="egg-close">Fechar</button></div></dialog>'+
 '<dialog id="zoom" aria-label="Foto ampliada"><div class="zph" id="zoom-ph"></div><div class="zcap"><b id="zoom-nome"></b><span id="zoom-sub"></span></div><button class="btn zclose" aria-label="Fechar">Fechar</button></dialog>';
 
 function $(id){return document.getElementById(id)}
@@ -526,6 +545,42 @@ function gisReady(gid){
   return gisInit;
 }
 $('login-cancel').addEventListener('click',function(){$('dlg-login').close()});
+
+// Easter egg: homenagem à Raissa. Abre ao digitar "raissa" (na página ou na busca) ou tocar 7 vezes em "Monster High".
+function eggRain(){
+  if(matchMedia('(prefers-reduced-motion:reduce)').matches)return;
+  var box=document.createElement('div'),bits=['💀','🦇','💖','🖤','🕷️','💜'];
+  box.className='egg-rain';box.setAttribute('aria-hidden','true');
+  for(var i=0;i<36;i++){
+    var s=document.createElement('span');s.textContent=bits[i%bits.length];
+    s.style.left=Math.random()*100+'vw';s.style.fontSize=(16+Math.random()*22)+'px';
+    s.style.animationDuration=(2.6+Math.random()*2.4)+'s';s.style.animationDelay=Math.random()*1.6+'s';
+    box.appendChild(s);
+  }
+  document.body.appendChild(box);setTimeout(function(){box.remove()},7000);
+}
+function openEgg(){
+  var d=$('dlg-egg');if(d.open)return;
+  var top=document.querySelector('dialog[open]');if(top)top.close();
+  d.showModal();eggRain();
+}
+$('egg-close').addEventListener('click',function(){$('dlg-egg').close()});
+var eggTyped='';
+document.addEventListener('keydown',function(e){
+  if(e.ctrlKey||e.metaKey||e.altKey||e.key.length!==1)return;
+  var t=e.target;if(t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)))return;
+  eggTyped=(eggTyped+e.key.toLowerCase()).slice(-6);
+  if(eggTyped==='raissa'){eggTyped='';openEgg()}
+});
+$('q').addEventListener('input',function(){
+  var v=this.value.trim().toLowerCase();
+  if(v==='raissa'||v==='raissa massaroli')openEgg();
+});
+var eggTaps=0,eggTimer=null;
+document.querySelector('h1 em').addEventListener('click',function(){
+  clearTimeout(eggTimer);eggTimer=setTimeout(function(){eggTaps=0},1500);
+  if(++eggTaps>=7){eggTaps=0;openEgg()}
+});
 function logout(){
   if(editable()&&ui.dirty&&!confirm('Há alterações não salvas. Sair mesmo assim?'))return;
   sb.auth.signOut().catch(function(){});
