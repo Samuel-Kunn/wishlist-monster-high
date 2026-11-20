@@ -130,11 +130,14 @@ body{margin:0;min-height:100vh}
 .empty p{margin:0 auto;max-width:44ch}
 .share-row{display:flex;gap:8px}
 .share-row input{flex:1}
+.gbtn{display:flex;justify-content:center;min-height:44px;margin:8px 0 4px}
+.gbtn iframe{color-scheme:light}
 .site-foot{text-align:center;padding:0 16px 32px;font-size:.8rem}
 .site-foot a{color:var(--muted)}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
+<script src="https://accounts.google.com/gsi/client" async></script>
 </head>
 <body>
 <div id="app" class="wrap"></div>
@@ -198,6 +201,8 @@ app.innerHTML=
 '<label>Link para mandar aos amigos<span class="share-row"><input id="i-share" readonly><button type="button" class="btn" id="share-copy">Copiar</button></span></label>'+
 '<p class="note">Quem abrir o link vê sua lista e pode reservar presentes. Você não vê as reservas, para não estragar a surpresa.</p>'+
 '<div class="dlgacts"><button type="button" class="btn ghost" id="share-cancel">Fechar</button><button type="button" class="btn" id="share-send" hidden>Enviar…</button><button class="btn primary">Guardar nome</button></div></form></dialog>'+
+'<dialog id="dlg-login"><h2>Entrar</h2><p class="note">Use sua conta Google para montar sua lista ou reservar um presente.</p><div id="gbtn" class="gbtn"></div>'+
+'<div class="dlgacts"><button type="button" class="btn ghost" id="login-cancel">Cancelar</button></div></dialog>'+
 '<dialog id="zoom" aria-label="Foto ampliada"><div class="zph" id="zoom-ph"></div><div class="zcap"><b id="zoom-nome"></b><span id="zoom-sub"></span></div><button class="btn zclose" aria-label="Fechar">Fechar</button></dialog>';
 
 function $(id){return document.getElementById(id)}
@@ -485,13 +490,42 @@ $('save').addEventListener('click',function(){
 window.addEventListener('beforeunload',function(e){if(editable()&&ui.dirty){e.preventDefault();e.returnValue=''}});
 
 // entrar e sair
-function login(){
-  if(!sb)return;
-  if(editable()&&ui.dirty&&!confirm('Há alterações não salvas. Entrar mesmo assim?'))return;
+// Login pelo botão oficial do Google dentro do site: o Google mostra o endereço do site,
+// não o do banco. Se o script do Google não carregar, cai no login antigo por redirecionamento.
+function loginRedirect(){
   sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+location.pathname+location.search}}).then(function(r){
     if(r&&r.error){ui.msg='Não deu para abrir o login do Google. Tente de novo.';render()}
   });
 }
+function hex(buf){return Array.prototype.map.call(new Uint8Array(buf),function(b){return('0'+b.toString(16)).slice(-2)}).join('')}
+function login(){
+  if(!sb)return;
+  if(editable()&&ui.dirty&&!confirm('Há alterações não salvas. Entrar mesmo assim?'))return;
+  var gid=window.google&&google.accounts&&google.accounts.id;
+  if(!gid||!CFG.googleClientId||!(window.crypto&&crypto.subtle))return loginRedirect();
+  gisReady(gid).then(function(){
+    var box=$('gbtn');box.innerHTML='';
+    gid.renderButton(box,{theme:'filled_black',size:'large',shape:'pill',text:'signin_with',locale:'pt-BR',width:260});
+    $('dlg-login').showModal();
+  }).catch(loginRedirect);
+}
+// O Google é preparado uma vez por página, com um "nonce" que o Supabase confere no login.
+var gisInit=null;
+function gisReady(gid){
+  if(gisInit)return gisInit;
+  var raw=hex(crypto.getRandomValues(new Uint8Array(16)));
+  gisInit=crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw)).then(function(h){
+    gid.initialize({client_id:CFG.googleClientId,nonce:hex(h),ux_mode:'popup',callback:function(resp){
+      $('dlg-login').close();
+      sb.auth.signInWithIdToken({provider:'google',token:resp.credential,nonce:raw}).then(function(r){
+        if(r.error){ui.msg='Não deu para entrar com o Google. Tente de novo.';render()}
+      });
+    }});
+  });
+  gisInit.catch(function(){gisInit=null});
+  return gisInit;
+}
+$('login-cancel').addEventListener('click',function(){$('dlg-login').close()});
 function logout(){
   if(editable()&&ui.dirty&&!confirm('Há alterações não salvas. Sair mesmo assim?'))return;
   sb.auth.signOut().catch(function(){});
